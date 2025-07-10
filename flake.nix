@@ -9,11 +9,15 @@
     let
       system = "x86_64-linux";
       pkgs = nixpkgs.legacyPackages.${system};
+      
+      python-with-packages = pkgs.python313.withPackages (ps: with ps; [
+        python-dotenv
+      ]);
     in
     {
       devShells.${system}.default = pkgs.mkShell {
         buildInputs = with pkgs; [
-          python313
+          python-with-packages
         ];
         
         shellHook = ''
@@ -24,15 +28,19 @@
 
       packages.${system} = {
         test = pkgs.writeShellScriptBin "test" ''
-          ${pkgs.python313}/bin/python ${./scripts/test.py} "$@"
+          ${python-with-packages}/bin/python ${./scripts/test.py} "$@"
         '';
         
         git-hook = pkgs.writeShellScriptBin "git-hook" ''
-          ${pkgs.python313}/bin/python ${./scripts/git_hook.py} "$@"
+          ${python-with-packages}/bin/python ${./scripts/git_hook.py} "$@"
         '';
         
         dangerous-commands = pkgs.writeShellScriptBin "dangerous-commands" ''
-          ${pkgs.python313}/bin/python ${./scripts/dangerous_commands.py} "$@"
+          ${python-with-packages}/bin/python ${./scripts/dangerous_commands.py} "$@"
+        '';
+        
+        notification = pkgs.writeShellScriptBin "notification" ''
+          ${python-with-packages}/bin/python ${./scripts/notifications.py} "$@"
         '';
       };
     };
