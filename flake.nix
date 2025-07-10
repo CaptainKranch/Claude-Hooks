@@ -22,15 +22,18 @@
         '';
       };
 
-      packages.${system}.test = pkgs.writeShellScriptBin "test" ''
-        ${pkgs.python312}/bin/python ${./scripts/test.py} "$@"
-      '';
-      
-      packages.${system}.git-hook = pkgs.writeShellScriptBin "git-hook" ''
-        ${pkgs.python312}/bin/python ${./scripts/git_hook.py} "$@"
-      '';
-      packages.${system}.dangerous-commands = pkgs.writeShellScriptBin "dangerous-commands" ''
-        ${pkgs.python312}/bin/python ${./scripts/dangerous_commands.py} "$@"
-      '';
+      packages.${system} = {
+        test = pkgs.writeShellScriptBin "test" ''
+          ${pkgs.python313}/bin/python ${./scripts/test.py} "$@"
+        '';
+        
+        git-hook = pkgs.writeShellScriptBin "git-hook" ''
+          ${pkgs.python313}/bin/python ${./scripts/git_hook.py} "$@"
+        '';
+        
+        dangerous-commands = pkgs.writeShellScriptBin "dangerous-commands" ''
+          ${pkgs.python313}/bin/python ${./scripts/dangerous_commands.py} "$@"
+        '';
+      };
     };
 }
