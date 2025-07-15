@@ -247,6 +247,30 @@ def main():
     except Exception:
         sys.exit(0)
     
+    # Log the notification event
+    log_dir = Path.cwd() / 'logs'
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_path = log_dir / 'notifications.json'
+    
+    # Read existing log data or initialize empty list
+    if log_path.exists():
+        with open(log_path, 'r') as f:
+            try:
+                log_data = json.load(f)
+            except (json.JSONDecodeError, ValueError):
+                log_data = []
+    else:
+        log_data = []
+    
+    # Add timestamp to input data for logging
+    log_entry = input_data.copy()
+    log_entry['timestamp'] = datetime.now().isoformat()
+    log_data.append(log_entry)
+    
+    # Write back to file with formatting
+    with open(log_path, 'w') as f:
+        json.dump(log_data, f, indent=2)
+    
     # Check if we should send notifications for this event type
     config = NotificationConfig()
     hook_event = input_data.get('hook_event_name', '')
