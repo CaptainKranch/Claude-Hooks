@@ -42,15 +42,10 @@
         '';
         
         notification = pkgs.writeShellScriptBin "notification" ''
-          # Try to decrypt secrets from multiple locations
-          # 1. First try local secrets directory (when running locally)
+          # Try to decrypt secrets from local directory (works with submodules)
           if [ -f "secrets/telegram-token.age" ] && [ -f "secrets/telegram-chat-id.age" ]; then
             export CLAUDE_TELEGRAM_BOT_TOKEN=$(${pkgs.age}/bin/age -d -i ~/.ssh/id_ed25519 secrets/telegram-token.age 2>/dev/null || echo "")
             export CLAUDE_TELEGRAM_CHAT_ID=$(${pkgs.age}/bin/age -d -i ~/.ssh/id_ed25519 secrets/telegram-chat-id.age 2>/dev/null || echo "")
-          # 2. Try from the flake's source directory (when running from GitHub)
-          elif [ -f "${./secrets/telegram-token.age}" ] && [ -f "${./secrets/telegram-chat-id.age}" ]; then
-            export CLAUDE_TELEGRAM_BOT_TOKEN=$(${pkgs.age}/bin/age -d -i ~/.ssh/id_ed25519 ${./secrets/telegram-token.age} 2>/dev/null || echo "")
-            export CLAUDE_TELEGRAM_CHAT_ID=$(${pkgs.age}/bin/age -d -i ~/.ssh/id_ed25519 ${./secrets/telegram-chat-id.age} 2>/dev/null || echo "")
           fi
           
           ${python-with-packages}/bin/python ${./scripts/notifications.py} "$@"
