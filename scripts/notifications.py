@@ -49,7 +49,7 @@ class NotificationConfig:
         self.notify_on_errors = os.getenv('CLAUDE_NOTIFY_ERRORS', 'true').lower() == 'true'
         
         # Minimum time between notifications (seconds)
-        self.rate_limit = int(os.getenv('CLAUDE_NOTIFY_RATE_LIMIT', '60'))
+        self.rate_limit = int(os.getenv('CLAUDE_NOTIFY_RATE_LIMIT', '0'))
 
 
 class SlackNotifier:
@@ -261,10 +261,12 @@ def main():
         should_notify = True
         notification_type = "success"
     elif hook_event in ['PreToolUse', 'PostToolUse']:
-        # Only notify for certain tools or if explicitly configured
-        tool_name = input_data.get('tool_name', '')
-        if tool_name in ['Task', 'Bash'] and config.notify_on_completion:
-            should_notify = True
+        should_notify = True
+        notification_type = "info"
+    else:
+        # For testing and unknown events, always send
+        should_notify = True
+        notification_type = "info"
     
     if not should_notify:
         sys.exit(0)
