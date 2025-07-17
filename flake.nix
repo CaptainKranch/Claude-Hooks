@@ -6,7 +6,7 @@
     agenix.url = "github:ryantm/agenix";
   };
 
-  outputs = { self, nixpkgs, agenix }: 
+  outputs = { self, nixpkgs, agenix }:
     let
       system = "x86_64-linux";
       pkgs = nixpkgs.legacyPackages.${system};
@@ -41,35 +41,66 @@
           ${python-with-packages}/bin/python ${./scripts/dangerous_commands.py} "$@"
         '';
         
-        notification = pkgs.writeShellScriptBin "notification" ''
-          # Try to decrypt secrets from Silencer submodule (if available)
-          # This only works when cloned with --recursive, not via nix run github:...
-          if [ -f "secrets/telegram-token.age" ] && [ -f "secrets/telegram-chat-id.age" ]; then
-            # Try multiple SSH key types
-            SSH_KEYS=("$HOME/.ssh/id_ed25519" "$HOME/.ssh/id_rsa" "$HOME/.ssh/id_ecdsa")
+        notification = let
+          # Create a derivation that includes the secrets from submodules
+          srcWithSecrets = pkgs.stdenv.mkDerivation {
+            name = "claude-hooks-with-secrets";
+            src = self;
             
-            for ssh_key in "''${SSH_KEYS[@]}"; do
-              if [ -f "$ssh_key" ]; then
-                if BOT_TOKEN=$(${pkgs.age}/bin/age -d -i "$ssh_key" secrets/telegram-token.age 2>&1) && \
-                   CHAT_ID=$(${pkgs.age}/bin/age -d -i "$ssh_key" secrets/telegram-chat-id.age 2>&1); then
-                  export CLAUDE_TELEGRAM_BOT_TOKEN="$BOT_TOKEN"
-                  export CLAUDE_TELEGRAM_CHAT_ID="$CHAT_ID"
-                  break
-                fi
+            buildPhase = ''
+              mkdir -p $out
+              if [ -d secrets ]; then
+                cp -r secrets $out/
               fi
-            done
-          fi
+              cp -r scripts $out/
+            '';
+            
+            installPhase = "true";
+          };
+        in pkgs.writeShellScriptBin "notification" ''
+          # Try to decrypt secrets from multiple locations
+          SECRET_LOCATIONS=(
+            "${srcWithSecrets}/secrets"     # From flake source (works with ?submodules=1)
+            "./secrets"                      # Current directory (for local dev)
+            "$PWD/secrets"                   # Absolute path to current directory
+          )
+          
+          FOUND_SECRETS=false
+          for secret_dir in "''${SECRET_LOCATIONS[@]}"; do
+            if [ -f "$secret_dir/telegram-token.age" ] && [ -f "$secret_dir/telegram-chat-id.age" ]; then
+              # Try multiple SSH key types
+              SSH_KEYS=("$HOME/.ssh/id_ed25519" "$HOME/.ssh/id_rsa" "$HOME/.ssh/id_ecdsa")
+              
+              for ssh_key in "''${SSH_KEYS[@]}"; do
+                if [ -f "$ssh_key" ]; then
+                  if BOT_TOKEN=$(${pkgs.age}/bin/age -d -i "$ssh_key" "$secret_dir/telegram-token.age" 2>&1) && \
+                     CHAT_ID=$(${pkgs.age}/bin/age -d -i "$ssh_key" "$secret_dir/telegram-chat-id.age" 2>&1); then
+                    export CLAUDE_TELEGRAM_BOT_TOKEN="$BOT_TOKEN"
+                    export CLAUDE_TELEGRAM_CHAT_ID="$CHAT_ID"
+                    FOUND_SECRETS=true
+                    echo "✅ Successfully decrypted secrets from: $secret_dir" >&2
+                    break 2  # Break out of both loops
+                  fi
+                fi
+              done
+            fi
+          done
           
           # Check if credentials are available
-          if [ -z "$CLAUDE_TELEGRAM_BOT_TOKEN" ] || [ -z "$CLAUDE_TELEGRAM_CHAT_ID" ]; then
-            echo "ℹ️  Telegram credentials not found in Silencer submodule." >&2
-            echo "   Please set environment variables:" >&2
-            echo "   export CLAUDE_TELEGRAM_BOT_TOKEN='your_token'" >&2
-            echo "   export CLAUDE_TELEGRAM_CHAT_ID='your_chat_id'" >&2
-            echo "" >&2
+          if [ "$FOUND_SECRETS" = "false" ]; then
+            if [ -z "$CLAUDE_TELEGRAM_BOT_TOKEN" ] || [ -z "$CLAUDE_TELEGRAM_CHAT_ID" ]; then
+              echo "ℹ️  Telegram credentials not found in Silencer submodule." >&2
+              echo "   For admins with Silencer access:" >&2
+              echo "   nix run 'github:CaptainKranch/Claude-Hooks?submodules=1#notification'" >&2
+              echo "" >&2
+              echo "   For others: Set environment variables:" >&2
+              echo "   export CLAUDE_TELEGRAM_BOT_TOKEN='your_token'" >&2
+              echo "   export CLAUDE_TELEGRAM_CHAT_ID='your_chat_id'" >&2
+              echo "" >&2
+            fi
           fi
           
-          ${python-with-packages}/bin/python ${./scripts/notifications.py} "$@"
+          ${python-with-packages}/bin/python ${srcWithSecrets}/scripts/notifications.py "$@"
         '';
         
         create-telegram-secrets = pkgs.writeShellScriptBin "create-telegram-secrets" ''
