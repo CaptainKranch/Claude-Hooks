@@ -20,6 +20,7 @@
         buildInputs = with pkgs; [
           python-with-packages
           age
+          agenix.packages.${system}.default
         ];
         
         shellHook = ''
@@ -41,28 +42,14 @@
           ${python-with-packages}/bin/python ${./scripts/dangerous_commands.py} "$@"
         '';
         
-        notification = let
-          # Create a derivation that includes the secrets from submodules
-          srcWithSecrets = pkgs.stdenv.mkDerivation {
-            name = "claude-hooks-with-secrets";
-            src = self;
-            
-            buildPhase = ''
-              mkdir -p $out
-              if [ -d secrets ]; then
-                cp -r secrets $out/
-              fi
-              cp -r scripts $out/
-            '';
-            
-            installPhase = "true";
-          };
-        in pkgs.writeShellScriptBin "notification" ''
+        notification = pkgs.writeShellScriptBin "notification" ''
           # Try to decrypt secrets from multiple locations
           SECRET_LOCATIONS=(
-            "${srcWithSecrets}/secrets"     # From flake source (works with ?submodules=1)
-            "./secrets"                      # Current directory (for local dev)
-            "$PWD/secrets"                   # Absolute path to current directory
+            "${./secrets/encrypted}"         # From the flake source (works with nix run github:...)
+            "./secrets/encrypted"            # Current directory (for local dev)
+            "$PWD/secrets/encrypted"         # Absolute path to current directory
+            "./secrets"                      # Legacy location for submodule
+            "$PWD/secrets"                   # Legacy absolute path
           )
           
           FOUND_SECRETS=false
@@ -100,7 +87,7 @@
             fi
           fi
           
-          ${python-with-packages}/bin/python ${srcWithSecrets}/scripts/notifications.py "$@"
+          ${python-with-packages}/bin/python ${./scripts/notifications.py} "$@"
         '';
         
         create-telegram-secrets = pkgs.writeShellScriptBin "create-telegram-secrets" ''
@@ -191,6 +178,45 @@
           echo "These files are encrypted with $SELECTED_KEY and safe to commit."
           echo ""
           echo "Note: To decrypt these secrets, you'll need the corresponding private key."
+        '';
+        
+        # Agenix wrapper for managing secrets
+        secrets = pkgs.writeShellScriptBin "secrets" ''
+          echo "Claude-Hooks Secrets Management"
+          echo "=============================="
+          echo ""
+          echo "Commands:"
+          echo "  edit <secret>    - Edit an encrypted secret"
+          echo "  rekey           - Re-encrypt all secrets with updated keys"
+          echo "  create <secret> - Create a new encrypted secret"
+          echo ""
+          
+          case "$1" in
+            edit)
+              if [ -z "$2" ]; then
+                echo "Usage: $0 edit <secret-name>"
+                echo "Example: $0 edit telegram-token"
+                exit 1
+              fi
+              ${agenix.packages.${system}.default}/bin/agenix -e "secrets/encrypted/$2.age"
+              ;;
+            rekey)
+              ${agenix.packages.${system}.default}/bin/agenix -r
+              ;;
+            create)
+              if [ -z "$2" ]; then
+                echo "Usage: $0 create <secret-name>"
+                echo "Example: $0 create telegram-token"
+                exit 1
+              fi
+              ${agenix.packages.${system}.default}/bin/agenix -e "secrets/encrypted/$2.age"
+              ;;
+            *)
+              echo "Unknown command: $1"
+              echo "Use: edit, rekey, or create"
+              exit 1
+              ;;
+          esac
         '';
       };
     };

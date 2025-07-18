@@ -1,45 +1,50 @@
-# Architecture: Claude-Hooks + Silencer
+# Architecture: Claude-Hooks with Integrated Secrets
 
 ## Repository Structure
 
-- **Claude-Hooks** (Public): Contains Python hook scripts for Claude Code
-- **Silencer** (Private): Contains encrypted credentials using agenix, added as git submodule
+**Claude-Hooks** now contains:
+- Python hook scripts for Claude Code
+- Encrypted secrets using agenix (in `secrets/encrypted/`)
+- Public key configuration (`secrets.nix`)
 
-## The Nix Limitation
+## How It Works
 
-When running `nix run github:CaptainKranch/Claude-Hooks#notification`, Nix:
-1. Clones the repository
-2. **Does NOT initialize git submodules**
-3. Cannot access private repositories
+### For Team Members (with SSH keys in secrets.nix)
+```bash
+# Just works - no setup needed!
+nix run github:CaptainKranch/Claude-Hooks#notification
+```
+- Nix fetches the repository including encrypted secrets
+- Automatically decrypts using your SSH key
+- No environment variables or submodules needed
 
-This is by design for security and reproducibility.
-
-## Solution: Dual-Mode Operation
-
-### Public Users (via `nix run github:...`)
+### For Public Users (without SSH access)
 ```bash
 export CLAUDE_TELEGRAM_BOT_TOKEN="your_token"
 export CLAUDE_TELEGRAM_CHAT_ID="your_chat_id"
 nix run github:CaptainKranch/Claude-Hooks#notification
 ```
-- Must provide credentials via environment variables
-- Submodule is never accessed
+- Decryption fails gracefully
+- Falls back to environment variables
 
-### Your Team (with Silencer access)
-```bash
-git clone --recursive git@github.com:CaptainKranch/Claude-Hooks.git
-cd Claude-Hooks
-nix run .#notification
-```
-- Silencer submodule provides encrypted credentials
-- No environment variables needed
-- Automatic decryption with your SSH keys
+## Security Model
 
-## Why This Works
+1. **Encrypted Secrets**: Stored in the public repo but encrypted with age
+2. **SSH Key Authentication**: Only listed SSH keys can decrypt
+3. **Graceful Fallback**: Non-team members can still use env vars
+4. **Version Control**: Secrets are versioned alongside code
 
-1. **Security**: Credentials stay in private Silencer repo
-2. **Simplicity**: Public users just set env vars
-3. **Convenience**: Your team gets automatic credential handling
-4. **Open Source**: Public repo remains credential-free
+## Benefits
 
-This is the standard pattern for open source projects with private credentials.
+- ✅ **Zero Configuration**: Team members just run the command
+- ✅ **Works Remotely**: `nix run github:...` includes everything
+- ✅ **No Submodules**: Simpler repository structure
+- ✅ **Easy Onboarding**: Just add SSH keys to `secrets.nix`
+
+## Trade-offs
+
+- ⚠️ Encrypted secrets visible in public repo (but secure with proper key management)
+- ⚠️ Requires re-encryption when team changes
+- ⚠️ SSH key compromise requires immediate action
+
+This approach prioritizes convenience for your team while maintaining security through encryption.
